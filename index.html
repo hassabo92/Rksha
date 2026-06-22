@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🚕 أم ضوابان - الكباتن</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f1f5f9;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 30px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            flex: 1;
+        }
+        h1 { text-align: center; color: #0f172a; margin-bottom: 20px; }
+        .login-box, .register-box {
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+        }
+        .login-box input, .register-box input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            margin-bottom: 12px;
+            background: white;
+            text-align: right;
+        }
+        .login-box button, .register-box button {
+            width: 100%;
+            padding: 12px;
+            background: #f59e0b;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .login-box button:hover, .register-box button:hover { background: #d97706; }
+        .logout-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            float: left;
+        }
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            float: left;
+            margin-left: 10px;
+        }
+        .btn-secondary:hover { background: #4b5563; }
+        .request-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+            transition: 0.2s;
+        }
+        .request-card:hover { border-color: #f59e0b; }
+        .request-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .request-user { font-weight: bold; color: #0f172a; }
+        .request-status {
+            background: #fef3c7;
+            color: #b45309;
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .request-details { color: #475569; font-size: 0.95rem; margin: 8px 0; }
+        .request-time { color: #94a3b8; font-size: 0.75rem; }
+        .action-btns {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .action-btns button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.8rem;
+        }
+        .btn-accept { background: #10b981; color: white; }
+        .btn-accept:hover { background: #059669; }
+        .btn-complete { background: #3b82f6; color: white; }
+        .btn-complete:hover { background: #2563eb; }
+        .btn-reject { background: #f59e0b; color: white; }
+        .btn-reject:hover { background: #d97706; }
+        .btn-unfit { background: #ef4444; color: white; }
+        .btn-unfit:hover { background: #dc2626; }
+        .btn-chat { background: #8b5cf6; color: white; }
+        .btn-chat:hover { background: #7c3aed; }
+        .empty-msg { text-align: center; color: #94a3b8; padding: 40px 0; }
+        .note {
+            background: #fef9e7;
+            border-right: 4px solid #f59e0b;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            color: #78350f;
+        }
+        .captain-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .captain-info .left-btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .toggle-link {
+            display: block;
+            text-align: center;
+            color: #2563eb;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        .toggle-link:hover { text-decoration: underline; }
+        .chat-container {
+            margin-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 12px;
+            display: none;
+        }
+        .chat-messages {
+            max-height: 150px;
+            overflow-y: auto;
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+        .chat-input-group {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input-group input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 0.85rem;
+        }
+        .chat-input-group button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .msg-sender { font-size: 0.7rem; color: #475569; font-weight: bold; }
+        .msg-text { font-size: 0.85rem; }
+        .msg-time { font-size: 0.6rem; color: #94a3b8; margin-right: 8px; }
+        .msg-bubble {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            max-width: 80%;
+            margin-bottom: 4px;
+        }
+        .msg-bubble-mine { background: #dbeafe; float: left; clear: both; }
+        .msg-bubble-other { background: #e5e7eb; float: right; clear: both; }
+        .footer {
+            text-align: center;
+            padding: 15px 0 5px 0;
+            background: #000000;
+            color: #ffffff;
+            font-size: 0.95rem;
+            border-radius: 12px;
+            margin-top: 20px;
+            border: 1px solid #333;
+            text-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff, 0 0 30px #ffffff;
+            box-shadow: 0 0 15px rgba(255,255,255,0.2);
+        }
+        .footer b {
+            color: #ffffff;
+            text-shadow: 0 0 15px #ffffff, 0 0 30px #ffffff;
+        }
+        .new-msg-alert {
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-right: 6px;
+            animation: pulse-red 1s infinite;
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .completed-container {
+            margin-top: 20px;
+            border-top: 2px dashed #e2e8f0;
+            padding-top: 20px;
+            display: none;
+        }
+        .completed-container .completed-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .completed-container .completed-title h3 {
+            margin: 0;
+            color: #0f172a;
+        }
+        .completed-container .completed-title .close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .completed-container .completed-title .close-btn:hover { background: #dc2626; }
+        .completed-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+        }
+        .completed-card .comp-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .completed-card .comp-user { font-weight: bold; color: #0f172a; }
+        .completed-card .comp-type {
+            background: #dbeafe;
+            color: #1d4ed8;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        .completed-card .comp-details { color: #475569; font-size: 0.9rem; margin: 6px 0; }
+        .completed-card .comp-time { color: #94a3b8; font-size: 0.7rem; }
+        .comp-badge {
+            background: #10b981;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-right: 6px;
+        }
+        .notification-permission-bar {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 8px 14px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+<div class="container" id="app">
+    <h1>🚕 لوحة تحكم الكباتن</h1>
+    
+    <div id="login-section">
+        <div class="login-box">
+            <h3 style="margin-bottom:12px;">🔐 تسجيل دخول الكابتن</h3>
+            <p style="color:#64748b; font-size:0.85rem; margin-bottom:15px;">الحسابات لا تُفعّل إلا بعد موافقة الإدارة</p>
+            <input type="text" id="captain-username" placeholder="اسم المستخدم">
+            <input type="password" id="captain-password" placeholder="كلمة السر">
+            <button onclick="captainLogin()">تسجيل الدخول</button>
+            <span class="toggle-link" onclick="showRegister()">ليس لديك حساب؟ سجل الآن</span>
+        </div>
+    </div>
+
+    <div id="register-section" style="display:none;">
+        <div class="register-box">
+            <h3 style="margin-bottom:12px;">📝 تسجيل كابتن جديد</h3>
+            <p style="color:#64748b; font-size:0.85rem; margin-bottom:15px;">بعد التسجيل، سيتم مراجعة طلبك من قبل الإدارة لتفعيل الحساب</p>
+            <input type="text" id="reg-fullname" placeholder="الاسم الرباعي (يظهر للعملاء)" style="text-align:right;">
+            <input type="text" id="reg-username" placeholder="اسم المستخدم (للحساب فقط)" style="text-align:right;">
+            <input type="password" id="reg-password" placeholder="كلمة السر">
+            <input type="password" id="reg-password-confirm" placeholder="تأكيد كلمة السر">
+            <button onclick="registerCaptain()">تسجيل</button>
+            <span class="toggle-link" onclick="showLogin()">لديك حساب بالفعل؟ سجل دخولك</span>
+        </div>
+    </div>
+
+    <div id="dashboard-section" style="display:none;">
+        <div class="captain-info">
+            <span style="font-weight:bold;">👤 <span id="captain-name-display"></span></span>
+            <div class="left-btns">
+                <button class="btn-secondary" onclick="toggleCompletedTrips()">📋 الرحلات المكتملة <span id="completedCountBadge" class="comp-badge" style="display:none;">0</span></button>
+                <button class="logout-btn" onclick="captainLogout()">تسجيل خروج</button>
+            </div>
+        </div>
+        
+        <!-- شريط حالة الإشعارات -->
+        <div id="notificationStatus" class="notification-permission-bar" style="display:none;">
+            🔔 الإشعارات مفعّلة – ستصل التنبيهات عند وجود طلبات جديدة
+        </div>
+
+        <div class="note">
+            ⚡ الطلبات الجديدة تظهر تلقائياً. يمكنك <b>قبول</b> الطلب، <b>رفضه</b> (سيختفي من قائمتك فقط)، أو <b>إنهاؤه</b> بعد التنفيذ. في حال عدم الاتفاق بعد القبول، استخدم <b>غير ملائم</b> ليعود الطلب للكباتن الآخرين.
+        </div>
+        <div id="requests-container">
+            <div class="empty-msg">جاري تحميل الطلبات...</div>
+        </div>
+
+        <!-- قسم الرحلات المكتملة -->
+        <div id="completedTripsContainer" class="completed-container">
+            <div class="completed-title">
+                <h3>📋 الرحلات المكتملة</h3>
+                <button class="close-btn" onclick="toggleCompletedTrips()">✕ إغلاق</button>
+            </div>
+            <div id="completedTripsList">
+                <div class="empty-msg">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    برمجة و تطوير <b>حسب الرسول حسن احمد الشيخ</b> © 2026 م
+</div>
+
+<script>
+    // ===== تكوين Firebase =====
+    const firebaseConfig = {
+        apiKey: "AIzaSyC0DjfY8GdsIjAcyf5iuaoltqYcOnrVsZk",
+        authDomain: "rksha-d7c59.firebaseapp.com",
+        databaseURL: "https://rksha-d7c59-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "rksha-d7c59",
+        storageBucket: "rksha-d7c59.firebasestorage.app",
+        messagingSenderId: "1053686166398",
+        appId: "1:1053686166398:web:6e13f1912e14803c2e392f"
+    };
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+
+    // ===== دوال الرسائل =====
+    function showAlert(message, icon = 'info') {
+        Swal.fire({
+            title: 'منصة أم ضوابان الإلكترونية',
+            text: message,
+            icon: icon,
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#2563eb',
+        });
+    }
+
+    function showConfirm(message) {
+        return Swal.fire({
+            title: 'منصة أم ضوابان الإلكترونية',
+            text: message,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'نعم',
+            cancelButtonText: 'لا',
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#ef4444',
+        });
+    }
+
+    // ===== المتغيرات =====
+    const RIDE_DB_URL = "https://rksha-d7c59-default-rtdb.europe-west1.firebasedatabase.app/";
+    const RIDE_REQUESTS_URL = RIDE_DB_URL + "ride_requests.json";
+    const CAPTAINS_URL = RIDE_DB_URL + "captains.json";
+
+    let currentCaptain = null;
+    let currentCaptainFullName = null;
+    let requestsListener = null;
+    let completedTripsVisible = false;
+    let completedTripsLoaded = false;
+    let notificationListener = null;
+    let lastNotifiedRequestId = null;
+    let fcmToken = null;
+
+    // ============================================================
+    // ===== VAPID KEY (Web Push Notification) =====
+    // ============================================================
+    const VAPID_KEY = 'BElg5wRrBkitPpH9tGN1WGEKVx0hVTdRYJSPdlyhkPRG2FEcaEzayQ8aoHKnNZ_fST7V3E9ZmVWmxMBgkSmgd0o';
+
+    // ============================================================
+    // ===== Firebase Cloud Messaging =====
+    // ============================================================
+    
+    // تسجيل Service Worker
+    async function registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) {
+            console.warn('المتصفح لا يدعم Service Workers');
+            return false;
+        }
+        try {
+            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+            console.log('✅ Service Worker مسجل بنجاح');
+            return registration;
+        } catch (e) {
+            console.error('❌ فشل تسجيل Service Worker:', e);
+            return false;
+        }
+    }
+
+    // الحصول على FCM Token
+    async function getFCMToken() {
+        if (!('Notification' in window) || Notification.permission === 'denied') {
+            console.warn('⚠️ الإشعارات مرفوضة من قبل المستخدم');
+            return null;
+        }
+
+        try {
+            const messaging = firebase.messaging();
+            const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+            if (token) {
+                fcmToken = token;
+                console.log('✅ FCM Token:', token);
+                await saveFCMToken(token);
+                return token;
+            } else {
+                console.warn('⚠️ لم يتم الحصول على FCM Token');
+                return null;
+            }
+        } catch (e) {
+            console.error('❌ خطأ في الحصول على FCM Token:', e);
+            if (e.message && e.message.includes('messaging/permission-blocked')) {
+                showAlert('⚠️ يرجى السماح بالإشعارات في إعدادات المتصفح', 'warning');
+            }
+            return null;
+        }
+    }
+
+    // حفظ FCM Token في قاعدة البيانات
+    async function saveFCMToken(token) {
+        if (!currentCaptain) return;
+        try {
+            const url = RIDE_DB_URL + `captains/${currentCaptain}/fcmTokens.json`;
+            const tokenData = {
+                [token]: {
+                    timestamp: Date.now(),
+                    userAgent: navigator.userAgent
+                }
+            };
+            await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(tokenData)
+            });
+            console.log('✅ تم حفظ FCM Token في قاعدة البيانات');
+        } catch (e) {
+            console.error('❌ فشل حفظ FCM Token:', e);
+        }
+    }
+
+    // الاستماع للرسائل أثناء تشغيل التطبيق
+    function setupFCMListener() {
+        try {
+            const messaging = firebase.messaging();
+            messaging.onMessage((payload) => {
+                console.log('📩 رسالة FCM واردة:', payload);
+                if (payload.notification) {
+                    const title = payload.notification.title || '🚕 طلب جديد';
+                    const body = payload.notification.body || 'يوجد طلب ركشه في انتظارك';
+                    showBrowserNotification(title, body);
+                    playNotificationSound();
+                    loadRequests(); // تحديث فوري
+                }
+            });
+        } catch (e) {
+            console.error('❌ فشل إعداد مستمع FCM:', e);
+        }
+    }
+
+    // تهيئة FCM
+    async function initializeFCM() {
+        if (!currentCaptain) return;
+        
+        try {
+            // تسجيل Service Worker
+            const swRegistered = await registerServiceWorker();
+            if (!swRegistered) {
+                console.warn('⚠️ Service Worker غير مسجل، سيتم استخدام الإشعارات العادية');
+                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (عادية) – تعمل عند فتح التطبيق';
+                document.getElementById('notificationStatus').style.display = 'block';
+                return;
+            }
+
+            // طلب إذن الإشعارات
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.warn('⚠️ الإشعارات غير مصرح بها');
+                document.getElementById('notificationStatus').textContent = '⚠️ يرجى السماح بالإشعارات في المتصفح';
+                document.getElementById('notificationStatus').style.display = 'block';
+                return;
+            }
+
+            // الحصول على Token
+            const token = await getFCMToken();
+            if (token) {
+                setupFCMListener();
+                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (FCM) – ستصل التنبيهات حتى عند إغلاق التطبيق ✅';
+                document.getElementById('notificationStatus').style.display = 'block';
+                showAlert('✅ تم تفعيل الإشعارات بنجاح! ستصل التنبيهات حتى عند إغلاق المتصفح.', 'success');
+            } else {
+                // في حال فشل FCM، نستخدم الإشعارات العادية
+                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (عادية) – تعمل عند فتح التطبيق';
+                document.getElementById('notificationStatus').style.display = 'block';
+            }
+        } catch (e) {
+            console.error('❌ فشل تهيئة FCM:', e);
+            // نستخدم الإشعارات العادية كحل بديل
+            document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (عادية) – تعمل عند فتح التطبيق';
+            document.getElementById('notificationStatus').style.display = 'block';
+        }
+    }
+
+    // إزالة FCM Token عند تسجيل الخروج
+    async function removeFCMToken() {
+        if (!currentCaptain || !fcmToken) return;
+        try {
+            const url = RIDE_DB_URL + `captains/${currentCaptain}/fcmTokens/${fcmToken}.json`;
+            await fetch(url, { method: 'DELETE' });
+            console.log('✅ تم حذف FCM Token');
+        } catch (e) {
+            console.error('❌ فشل حذف FCM Token:', e);
+        }
+    }
+
+    // ============================================================
+    // ===== دوال الإشعارات العادية (Web Notifications) =====
+    // ============================================================
+    
+    function showBrowserNotification(title, body) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        try {
+            const notification = new Notification(title, {
+                body: body,
+                icon: 'https://via.placeholder.com/64/2563eb/ffffff?text=🚕',
+                tag: 'new-ride-request',
+                requireInteraction: true
+            });
+            setTimeout(() => notification.close(), 15000);
+            notification.onclick = function() {
+                window.focus();
+                this.close();
+                document.getElementById('requests-container').scrollIntoView({ behavior: 'smooth' });
+            };
+        } catch (e) {
+            console.error('فشل عرض الإشعار', e);
+        }
+    }
+
+    function playNotificationSound() {
+        try {
+            const audio = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
+            audio.volume = 0.3;
+            audio.play().catch(e => console.log('صوت التنبيه معطل', e));
+        } catch (e) { /* تجاهل */ }
+    }
+
+    // ===== الاستماع للطلبات الجديدة (بدون FCM - احتياطي) =====
+    function setupNotificationListener() {
+        if (!currentCaptain) return;
+        if (notificationListener) {
+            firebase.database().ref('ride_requests').off('child_added', notificationListener);
+        }
+        
+        notificationListener = firebase.database().ref('ride_requests').orderByChild('timestamp').limitToLast(1);
+        notificationListener.on('child_added', (snapshot) => {
+            const requestId = snapshot.key;
+            const request = snapshot.val();
+            
+            if (lastNotifiedRequestId === requestId) return;
+            lastNotifiedRequestId = requestId;
+            
+            if (request.status === 'pending' && 
+                (!request.rejectedBy || !request.rejectedBy[currentCaptain])) {
+                
+                const title = `🚕 طلب ركشه جديد!`;
+                const typeText = request.type === 'ride' ? 'مشوار' : 'توصيل';
+                const body = `👤 ${request.userId} | ${typeText}`;
+                
+                showBrowserNotification(title, body);
+                playNotificationSound();
+                loadRequests();
+                updatePendingCount();
+            }
+        });
+    }
+
+    function updatePendingCount() {
+        fetch(RIDE_REQUESTS_URL).then(res => res.json()).then(requests => {
+            let count = 0;
+            if (requests) {
+                for (let key in requests) {
+                    const req = requests[key];
+                    if (req.status === 'pending' && 
+                        (!req.rejectedBy || !req.rejectedBy[currentCaptain])) {
+                        count++;
+                    }
+                }
+            }
+            if (count > 0) {
+                document.title = `🚕 (${count}) أم ضوابان - الكباتن`;
+            } else {
+                document.title = '🚕 أم ضوابان - الكباتن';
+            }
+        }).catch(e => console.error(e));
+    }
+
+    // ============================================================
+    // ===== دوال تسجيل الدخول والحساب =====
+    // ============================================================
+
+    function showRegister() {
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('register-section').style.display = 'block';
+    }
+    function showLogin() {
+        document.getElementById('register-section').style.display = 'none';
+        document.getElementById('login-section').style.display = 'block';
+    }
+
+    // ===== تسجيل كابتن جديد =====
+    async function registerCaptain() {
+        const fullName = document.getElementById('reg-fullname').value.trim();
+        const username = document.getElementById('reg-username').value.trim().toLowerCase();
+        const password = document.getElementById('reg-password').value.trim();
+        const confirm = document.getElementById('reg-password-confirm').value.trim();
+
+        if (!fullName || !username || !password || !confirm) {
+            showAlert("يرجى ملء جميع الحقول", "warning");
+            return;
+        }
+        if (fullName.length < 4) {
+            showAlert("الاسم الرباعي يجب أن يكون 4 أحرف على الأقل", "warning");
+            return;
+        }
+        if (password.length < 4) {
+            showAlert("كلمة السر يجب أن تكون 4 أحرف أو أكثر", "warning");
+            return;
+        }
+        if (password !== confirm) {
+            showAlert("كلمة السر غير متطابقة", "warning");
+            return;
+        }
+
+        try {
+            const res = await fetch(CAPTAINS_URL);
+            const captains = await res.json() || {};
+            if (captains[username]) {
+                showAlert("⚠️ اسم المستخدم هذا محجوز بالفعل", "error");
+                return;
+            }
+
+            const newCaptain = {
+                fullName: fullName,
+                password: password,
+                active: false,
+                registeredAt: Date.now()
+            };
+            const putUrl = RIDE_DB_URL + `captains/${username}.json`;
+            const putResponse = await fetch(putUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newCaptain)
+            });
+            if (!putResponse.ok) throw new Error("فشل الحفظ");
+
+            showAlert("🎉 تم تسجيلك بنجاح! سيتم تفعيل حسابك من قبل الإدارة قريباً.", "success");
+            showLogin();
+            document.getElementById('reg-fullname').value = '';
+            document.getElementById('reg-username').value = '';
+            document.getElementById('reg-password').value = '';
+            document.getElementById('reg-password-confirm').value = '';
+        } catch (e) {
+            showAlert("❌ حدث خطأ أثناء التسجيل: " + e.message, "error");
+            console.error(e);
+        }
+    }
+
+    // ===== تسجيل دخول مع حفظ الجلسة =====
+    async function captainLogin() {
+        const username = document.getElementById('captain-username').value.trim().toLowerCase();
+        const password = document.getElementById('captain-password').value.trim();
+        if (!username || !password) {
+            showAlert("يرجى ملء الحقول", "warning");
+            return;
+        }
+
+        try {
+            const res = await fetch(CAPTAINS_URL);
+            const captains = await res.json() || {};
+            const captain = captains[username];
+            if (!captain) {
+                showAlert("❌ اسم المستخدم غير موجود", "error");
+                return;
+            }
+            if (captain.password !== password) {
+                showAlert("❌ كلمة السر غير صحيحة", "error");
+                return;
+            }
+            if (captain.active !== true) {
+                showAlert("⏳ حسابك غير مفعّل بعد. يرجى الانتظار حتى موافقة الإدارة.", "warning");
+                return;
+            }
+
+            localStorage.setItem('captainSession', username);
+            currentCaptain = username;
+            currentCaptainFullName = captain.fullName || username;
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('register-section').style.display = 'none';
+            document.getElementById('dashboard-section').style.display = 'block';
+            document.getElementById('captain-name-display').textContent = `${captain.fullName} (${username})`;
+            
+            // تفعيل الإشعارات (FCM + عادية)
+            await initializeFCM();
+            setupNotificationListener(); // احتياطي
+            await loadRequests();
+            startListening();
+            updateCompletedCount();
+            console.log("✅ تم تسجيل الدخول بنجاح، جاري تحديث الطلبات...");
+        } catch (e) {
+            showAlert("خطأ في الاتصال بقاعدة البيانات", "error");
+            console.error(e);
+        }
+    }
+
+    // ===== التحقق من الجلسة المحفوظة =====
+    async function checkSession() {
+        const savedUsername = localStorage.getItem('captainSession');
+        if (!savedUsername) return;
+
+        try {
+            const res = await fetch(CAPTAINS_URL);
+            const captains = await res.json() || {};
+            const captain = captains[savedUsername];
+            if (!captain || captain.active !== true) {
+                localStorage.removeItem('captainSession');
+                return;
+            }
+
+            currentCaptain = savedUsername;
+            currentCaptainFullName = captain.fullName || savedUsername;
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('register-section').style.display = 'none';
+            document.getElementById('dashboard-section').style.display = 'block';
+            document.getElementById('captain-name-display').textContent = `${captain.fullName} (${savedUsername})`;
+            
+            await initializeFCM();
+            setupNotificationListener();
+            await loadRequests();
+            startListening();
+            updateCompletedCount();
+            console.log("✅ تم استعادة الجلسة، جاري تحديث الطلبات...");
+        } catch (e) {
+            console.error("خطأ في استعادة الجلسة", e);
+        }
+    }
+
+    function captainLogout() {
+        // إزالة مستمع الإشعارات
+        if (notificationListener) {
+            firebase.database().ref('ride_requests').off('child_added', notificationListener);
+            notificationListener = null;
+        }
+        // حذف FCM Token
+        removeFCMToken();
+        
+        localStorage.removeItem('captainSession');
+        currentCaptain = null;
+        currentCaptainFullName = null;
+        completedTripsVisible = false;
+        completedTripsLoaded = false;
+        document.getElementById('completedTripsContainer').style.display = 'none';
+        if (requestsListener) { clearInterval(requestsListener); requestsListener = null; }
+        if (window.captainChatIntervals) {
+            Object.values(window.captainChatIntervals).forEach(clearInterval);
+            window.captainChatIntervals = {};
+        }
+        document.getElementById('dashboard-section').style.display = 'none';
+        document.getElementById('login-section').style.display = 'block';
+        document.getElementById('captain-username').value = '';
+        document.getElementById('captain-password').value = '';
+        document.title = '🚕 أم ضوابان - الكباتن';
+        showAlert("تم تسجيل الخروج بنجاح", "info");
+    }
+
+    // ============================================================
+    // ===== دوال الطلبات والمحادثة =====
+    // ============================================================
+
+    async function loadRequests() {
+        console.log("🔄 جاري تحميل الطلبات...");
+        const container = document.getElementById('requests-container');
+        if (!container) return;
+        
+        try {
+            const res = await fetch(RIDE_REQUESTS_URL);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const requests = await res.json() || {};
+            
+            let html = '';
+            let hasVisible = false;
+            const sortedKeys = Object.keys(requests).sort((a,b) => requests[b].timestamp - requests[a].timestamp);
+
+            for (let key of sortedKeys) {
+                const req = requests[key];
+                if (req.status === 'completed') continue;
+                if (req.rejectedBy && req.rejectedBy[currentCaptain]) continue;
+                if (req.status === 'waiting_confirmation' && req.captainName !== currentCaptain) continue;
+                if (req.status === 'accepted' && req.captainName !== currentCaptain) continue;
+                if (req.status !== 'pending' && req.status !== 'accepted' && req.status !== 'waiting_confirmation') continue;
+
+                hasVisible = true;
+                const statusMap = {
+                    'pending': '⏳ قيد الانتظار',
+                    'accepted': '✅ تم القبول (في الطريق)',
+                    'waiting_confirmation': '⏳ بانتظار تأكيد العميل'
+                };
+                const typeLabel = req.type === 'ride' ? '🚗 مشوار' : '📦 توصيل';
+                let details = '';
+                if (req.type === 'ride') {
+                    details = `من: ${req.from} → إلى: ${req.to}`;
+                } else {
+                    details = `تسلم: ${req.pickup} → تسليم: ${req.dropoff}`;
+                    if (req.desc) details += ` (${req.desc})`;
+                }
+
+                const hasNewMsg = req.messages && req.messages.length > 0 && req.messages[req.messages.length-1].sender !== currentCaptain;
+                const newMsgAlert = hasNewMsg ? `<span class="new-msg-alert">🔴 جديد</span>` : '';
+
+                html += `
+                    <div class="request-card" id="req-${key}">
+                        <div class="request-header">
+                            <span class="request-user">👤 ${req.userId}</span>
+                            <span class="request-status">${statusMap[req.status] || req.status}</span>
+                        </div>
+                        <div class="request-details">${typeLabel} - ${details}</div>
+                        <div class="request-time">🕒 ${new Date(req.timestamp).toLocaleString('ar-EG')}</div>
+                        <div class="action-btns">
+                            ${req.status === 'pending' ? `
+                                <button class="btn-accept" onclick="updateRequest('${key}','accepted')">✅ قبول</button>
+                                <button class="btn-reject" onclick="rejectRequest('${key}')">❌ رفض</button>
+                            ` : ''}
+                            ${req.status === 'accepted' && req.captainName === currentCaptain ? `
+                                <button class="btn-complete" onclick="requestCompletion('${key}')">✔️ إنهاء</button>
+                                <button class="btn-unfit" onclick="unfitRequest('${key}')">⚠️ غير ملائم</button>
+                                <button class="btn-chat" onclick="toggleChat('${key}')">💬 محادثة ${newMsgAlert}</button>
+                            ` : ''}
+                            ${req.status === 'waiting_confirmation' && req.captainName === currentCaptain ? `
+                                <span style="color:#f59e0b; font-weight:bold; font-size:0.9rem;">⏳ في انتظار تأكيد العميل</span>
+                                <button class="btn-chat" onclick="toggleChat('${key}')">💬 محادثة ${newMsgAlert}</button>
+                            ` : ''}
+                        </div>
+                        <div id="chat-container-${key}" class="chat-container">
+                            <div id="chat-messages-${key}" class="chat-messages">
+                                <p style="color:#94a3b8; text-align:center;">لا توجد رسائل</p>
+                            </div>
+                            <div class="chat-input-group">
+                                <input type="text" id="chat-input-${key}" placeholder="اكتب رسالتك...">
+                                <button onclick="sendCaptainMessage('${key}')">إرسال</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            if (!hasVisible) {
+                html = '<div class="empty-msg">🚫 لا توجد طلبات معلقة أو قيد التنفيذ حالياً</div>';
+            }
+            container.innerHTML = html;
+            updatePendingCount();
+        } catch (e) {
+            console.error("❌ خطأ في loadRequests:", e);
+            container.innerHTML = '<div class="empty-msg" style="color:red;">حدث خطأ أثناء تحميل الطلبات</div>';
+        }
+    }
+
+    async function rejectRequest(id) {
+        const result = await showConfirm("هل تريد رفض هذا الطلب؟ سيختفي من قائمتك فقط.");
+        if (!result.isConfirmed) return;
+        try {
+            const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
+            const req = await res.json();
+            const rejectedBy = req.rejectedBy || {};
+            rejectedBy[currentCaptain] = true;
+            await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rejectedBy: rejectedBy })
+            });
+            await loadRequests();
+        } catch (e) {
+            showAlert("فشل رفض الطلب", "error");
+            console.error(e);
+        }
+    }
+
+    async function updateRequest(id, newStatus) {
+        if (!currentCaptain) return;
+        try {
+            const updateData = { status: newStatus };
+            if (newStatus === 'accepted') {
+                updateData.captainName = currentCaptain;
+                updateData.captainFullName = currentCaptainFullName;
+            }
+            await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            });
+            await loadRequests();
+        } catch (e) {
+            showAlert("فشل تحديث حالة الطلب", "error");
+            console.error(e);
+        }
+    }
+
+    async function requestCompletion(id) {
+        const result = await showConfirm("هل أنت متأكد من رغبتك في إنهاء هذا الطلب؟ سيتم إرسال طلب تأكيد للعميل.");
+        if (!result.isConfirmed) return;
+        try {
+            await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'waiting_confirmation' })
+            });
+            await loadRequests();
+        } catch (e) {
+            showAlert("فشل طلب الإنهاء", "error");
+            console.error(e);
+        }
+    }
+
+    async function unfitRequest(id) {
+        const result = await showConfirm("هل أنت متأكد أن هذا الطلب غير ملائم؟ سيتم إلغاء قبولك ويعود للكباتن الآخرين.");
+        if (!result.isConfirmed) return;
+        try {
+            const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
+            const req = await res.json();
+            const rejectedBy = req.rejectedBy || {};
+            rejectedBy[currentCaptain] = true;
+            
+            const notificationMessage = `الكابتن ${currentCaptainFullName || currentCaptain} قام بإلغاء الطلب لأنه غير ملائم له`;
+            
+            await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'pending',
+                    captainName: null,
+                    captainFullName: null,
+                    rejectedBy: rejectedBy,
+                    unfitNotification: {
+                        message: notificationMessage,
+                        timestamp: Date.now()
+                    }
+                })
+            });
+            await loadRequests();
+        } catch (e) {
+            showAlert("فشل تحديث الطلب", "error");
+            console.error(e);
+        }
+    }
+
+    // ===== المحادثة =====
+    function toggleChat(id) {
+        const container = document.getElementById(`chat-container-${id}`);
+        if (!container) return;
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+            if (requestsListener) {
+                clearInterval(requestsListener);
+                requestsListener = null;
+            }
+            loadCaptainMessages(id);
+            if (!window.captainChatIntervals) window.captainChatIntervals = {};
+            if (window.captainChatIntervals[id]) clearInterval(window.captainChatIntervals[id]);
+            window.captainChatIntervals[id] = setInterval(() => {
+                loadCaptainMessages(id);
+            }, 3000);
+            setTimeout(() => {
+                const input = document.getElementById(`chat-input-${id}`);
+                if (input) input.focus();
+            }, 100);
+        } else {
+            container.style.display = 'none';
+            if (window.captainChatIntervals && window.captainChatIntervals[id]) {
+                clearInterval(window.captainChatIntervals[id]);
+                delete window.captainChatIntervals[id];
+            }
+            if (!requestsListener) {
+                requestsListener = setInterval(loadRequests, 5000);
+            }
+        }
+    }
+
+    async function loadCaptainMessages(id) {
+        try {
+            const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
+            const req = await res.json();
+            const messages = req.messages || [];
+            const container = document.getElementById(`chat-messages-${id}`);
+            if (!container) return;
+            if (messages.length === 0) {
+                container.innerHTML = '<p style="color:#94a3b8; text-align:center;">لا توجد رسائل بعد</p>';
+                return;
+            }
+            let html = '';
+            messages.forEach(msg => {
+                const isMine = msg.sender === currentCaptain;
+                html += `<div style="text-align:${isMine ? 'left' : 'right'}; margin-bottom:4px;">
+                            <div class="msg-bubble ${isMine ? 'msg-bubble-mine' : 'msg-bubble-other'}">
+                                <div class="msg-sender">${msg.sender}</div>
+                                <div class="msg-text">${msg.text}</div>
+                                <div class="msg-time">${new Date(msg.time).toLocaleTimeString('ar-EG')}</div>
+                            </div>
+                            <div style="clear:both;"></div>
+                        </div>`;
+            });
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        } catch (e) { console.error(e); }
+    }
+
+    async function sendCaptainMessage(id) {
+        const input = document.getElementById(`chat-input-${id}`);
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+
+        try {
+            const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
+            const req = await res.json();
+            const messages = req.messages || [];
+            messages.push({
+                sender: currentCaptainFullName || currentCaptain,
+                text: text,
+                time: Date.now()
+            });
+            await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: messages })
+            });
+            loadCaptainMessages(id);
+            setTimeout(() => { if (input) input.focus(); }, 50);
+        } catch (e) {
+            showAlert("فشل إرسال الرسالة", "error");
+            console.error(e);
+        }
+    }
+
+    // ===== التحديث التلقائي =====
+    function startListening() {
+        if (requestsListener) clearInterval(requestsListener);
+        requestsListener = setInterval(loadRequests, 5000);
+        console.log("🔄 بدء التحديث التلقائي للطلبات كل 5 ثوانٍ");
+    }
+
+    // ===== الرحلات المكتملة =====
+    async function updateCompletedCount() {
+        if (!currentCaptain) return;
+        try {
+            const res = await fetch(RIDE_REQUESTS_URL);
+            const requests = await res.json() || {};
+            let count = 0;
+            for (let key in requests) {
+                const req = requests[key];
+                if (req.status === 'completed' && req.captainName === currentCaptain) {
+                    count++;
+                }
+            }
+            const badge = document.getElementById('completedCountBadge');
+            if (count > 0) {
+                badge.style.display = 'inline-block';
+                badge.textContent = count;
+            } else {
+                badge.style.display = 'none';
+            }
+        } catch (e) {
+            console.error("خطأ في تحديث عدد الرحلات المكتملة", e);
+        }
+    }
+
+    function toggleCompletedTrips() {
+        const container = document.getElementById('completedTripsContainer');
+        if (!container) return;
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+            completedTripsVisible = true;
+            loadCompletedTrips();
+        } else {
+            container.style.display = 'none';
+            completedTripsVisible = false;
+        }
+    }
+
+    async function loadCompletedTrips() {
+        const list = document.getElementById('completedTripsList');
+        if (!list) return;
+        list.innerHTML = '<div class="empty-msg">جاري التحميل...</div>';
+        
+        try {
+            const res = await fetch(RIDE_REQUESTS_URL);
+            if (!res.ok) throw new Error("فشل جلب البيانات");
+            const requests = await res.json() || {};
+            
+            let html = '';
+            let found = false;
+            const sortedKeys = Object.keys(requests).sort((a,b) => requests[b].timestamp - requests[a].timestamp);
+            
+            for (let key of sortedKeys) {
+                const req = requests[key];
+                if (req.status === 'completed' && req.captainName === currentCaptain) {
+                    found = true;
+                    const typeLabel = req.type === 'ride' ? '🚗 مشوار' : '📦 توصيل';
+                    let details = '';
+                    if (req.type === 'ride') {
+                        details = `من: ${req.from} → إلى: ${req.to}`;
+                    } else {
+                        details = `تسلم: ${req.pickup} → تسليم: ${req.dropoff}`;
+                        if (req.desc) details += ` (${req.desc})`;
+                    }
+                    html += `
+                        <div class="completed-card">
+                            <div class="comp-header">
+                                <span class="comp-user">👤 ${req.userId}</span>
+                                <span class="comp-type">${typeLabel}</span>
+                            </div>
+                            <div class="comp-details">${details}</div>
+                            <div class="comp-time">🕒 ${new Date(req.timestamp).toLocaleString('ar-EG')}</div>
+                            ${req.captainFullName ? `<div style="font-size:0.8rem; color:#64748b;">🚕 الكابتن: ${req.captainFullName}</div>` : ''}
+                        </div>
+                    `;
+                }
+            }
+            
+            if (!found) {
+                html = '<div class="empty-msg">📭 لا توجد رحلات مكتملة حتى الآن</div>';
+            }
+            list.innerHTML = html;
+            completedTripsLoaded = true;
+        } catch (e) {
+            console.error("خطأ في تحميل الرحلات المكتملة", e);
+            list.innerHTML = '<div class="empty-msg" style="color:red;">حدث خطأ أثناء التحميل</div>';
+        }
+    }
+
+    // ===== استعادة الجلسة عند تحميل الصفحة =====
+    window.onload = function() {
+        checkSession();
+    };
+</script>
+</body>
+</html>
