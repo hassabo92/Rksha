@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🛺 أم ضوابان - الكباتن</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
@@ -454,6 +453,11 @@
     const CAPTAINS_URL = RIDE_DB_URL + "captains.json";
     const CAPTAINS_LOCATIONS_URL = RIDE_DB_URL + "captains_locations.json";
 
+    // كائن تشغيل الصوت المخصص مع إعدادات التحميل المسبق
+    const alertSound = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav");
+    alertSound.preload = "auto";
+    alertSound.load(); // تحميل الملف مسبقاً في ذاكرة المتصفح
+
     let currentCaptain = null;
     let currentCaptainFullName = null;
     let currentCaptainPhone = null;
@@ -465,6 +469,10 @@
     let fcmToken = null;
     let locationUpdateInterval = null;
     let captainChatIntervals = {};
+
+    // ===== متغيرات التتبع =====
+    let trackingInterval = null;
+    let currentTrackingRideId = null;
 
     // ============================================================
     // 3. دوال مساعدة (تنبيهات)
@@ -492,7 +500,7 @@
     }
 
     // ============================================================
-    // 4. دوال تحديث الموقع (الجديدة)
+    // 4. دوال تحديث الموقع (العام)
     // ============================================================
     async function updateCaptainLocation() {
         const btn = document.getElementById('locationBtn');
@@ -515,7 +523,6 @@
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
 
-            // حفظ الموقع في قاعدة البيانات
             const locationData = {
                 name: currentCaptainFullName || currentCaptain,
                 phone: currentCaptainPhone || 'غير متوفر',
@@ -534,7 +541,6 @@
             document.getElementById('locationStatus').innerHTML = `📍 الموقع: <span class="online">تم التحديث (${lat.toFixed(6)}, ${lng.toFixed(6)})</span>`;
             showAlert("✅ تم تحديث موقعك بنجاح! سيظهر للعملاء على الخريطة.", "success");
 
-            // بدء التحديث التلقائي كل 30 ثانية
             if (locationUpdateInterval) clearInterval(locationUpdateInterval);
             locationUpdateInterval = setInterval(autoUpdateLocation, 30000);
 
@@ -597,7 +603,59 @@
     }
 
     // ============================================================
-    // 5. تسجيل الدخول والتسجيل
+    // 5. دوال التتبع (لتسجيل موقع الكابتن أثناء الرحلة)
+    // ============================================================
+    async function recordCaptainLocation(rideId) {
+        if (!currentCaptain) return;
+        try {
+            if (!navigator.geolocation) return;
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 0
+                });
+            });
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const timestamp = Date.now();
+            
+            const trackUrl = RIDE_DB_URL + `ride_tracking/${rideId}/captain_locations.json`;
+            const res = await fetch(trackUrl);
+            let locations = await res.json() || [];
+            locations.push({ lat, lng, timestamp });
+            await fetch(trackUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locations)
+            });
+        } catch (e) {
+            console.warn("فشل تسجيل موقع الكابتن للتتبع", e);
+        }
+    }
+
+    function startTracking(rideId) {
+        if (trackingInterval) {
+            clearInterval(trackingInterval);
+            trackingInterval = null;
+        }
+        currentTrackingRideId = rideId;
+        recordCaptainLocation(rideId);
+        trackingInterval = setInterval(() => {
+            recordCaptainLocation(rideId);
+        }, 5000);
+    }
+
+    function stopTracking() {
+        if (trackingInterval) {
+            clearInterval(trackingInterval);
+            trackingInterval = null;
+        }
+        currentTrackingRideId = null;
+    }
+
+    // ============================================================
+    // 6. تسجيل الدخول والتسجيل
     // ============================================================
     function showRegister() {
         document.getElementById('login-section').style.display = 'none';
@@ -667,7 +725,14 @@
                 return;
             }
 
-            // تسجيل الدخول
+            // فك قفل الصوت الخاص بالمتصفح عند ضغط زر تسجيل الدخول
+            if (alertSound) {
+                alertSound.play().then(() => {
+                    alertSound.pause();
+                    alertSound.currentTime = 0;
+                }).catch(e => console.log("تهيئة الصوت تمت."));
+            }
+
             localStorage.setItem('captainSession', username);
             currentCaptain = username;
             currentCaptainFullName = captain.fullName || username;
@@ -678,7 +743,6 @@
             document.getElementById('dashboard-section').style.display = 'block';
             document.getElementById('captain-name-display').textContent = `${captain.fullName} (${username})`;
 
-            // تهيئة الإشعارات
             try { await initializeFCM(); } catch(e) { console.error(e); }
             try { setupNotificationListener(); } catch(e) { console.error(e); }
 
@@ -728,8 +792,8 @@
             }
         } catch(e) {}
         
-        // إزالة الموقع من الخريطة
         removeCaptainLocation();
+        stopTracking(); 
         if (locationUpdateInterval) { clearInterval(locationUpdateInterval); locationUpdateInterval = null; }
 
         localStorage.removeItem('captainSession');
@@ -750,7 +814,7 @@
     }
 
     // ============================================================
-    // 6. FCM والإشعارات (مختصرة ولكن تعمل)
+    // 7. FCM والإشعارات (تم دمج النغمة الصوتية)
     // ============================================================
     const VAPID_KEY = 'BElg5wRrBkitPpH9tGN1WGEKVx0hVTdRYJSPdlyhkPRG2FEcaEzayQ8aoHKnNZ_fST7V3E9ZmVWmxMBgkSmgd0o';
 
@@ -770,6 +834,16 @@
                 });
                 messaging.onMessage((payload) => {
                     if (payload.notification) {
+                        
+                        // تشغيل النغمة بشكل مضمون عند استقبال الرسالة 🔔
+                        if (alertSound) {
+                            alertSound.currentTime = 0;
+                            var playPromise = alertSound.play();
+                            if (playPromise !== undefined) {
+                                playPromise.catch(error => console.log(error));
+                            }
+                        }
+                        
                         showBrowserNotification(payload.notification.title, payload.notification.body);
                         loadRequests();
                     }
@@ -798,6 +872,18 @@
             if (lastNotifiedRequestId === snapshot.key) return;
             lastNotifiedRequestId = snapshot.key;
             if (req.status === 'pending' && (!req.rejectedBy || !req.rejectedBy[currentCaptain])) {
+                
+                // تشغيل نغمة التنبيه بشكل مضمون 🔔
+                if (alertSound) {
+                    alertSound.currentTime = 0;
+                    var playPromise = alertSound.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.log("المتصفح حجب الصوت تلقائياً، سيتم التشغيل فور نقر الكابتن على الشاشة:", error);
+                        });
+                    }
+                }
+
                 const title = `🛺 طلب جديد من ${req.userId}`;
                 const body = req.type === 'ride' ? `مشوار: ${req.from} → ${req.to}` : `توصيل: ${req.pickup} → ${req.dropoff}`;
                 showBrowserNotification(title, body);
@@ -807,7 +893,7 @@
     }
 
     // ============================================================
-    // 7. دوال الطلبات والمحادثة
+    // 8. دوال الطلبات والمحادثة
     // ============================================================
     async function loadRequests() {
         const container = document.getElementById('requests-container');
@@ -899,6 +985,7 @@
             if (status === 'accepted') {
                 update.captainName = currentCaptain;
                 update.captainFullName = currentCaptainFullName;
+                startTracking(id);
             }
             await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
                 method: 'PATCH',
@@ -911,6 +998,7 @@
     async function requestCompletion(id) {
         const confirm = await showConfirm("هل تريد إنهاء هذا الطلب؟ سيطلب تأكيد العميل.");
         if (!confirm.isConfirmed) return;
+        stopTracking();
         await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ status: 'waiting_confirmation' })
@@ -922,6 +1010,7 @@
     async function unfitRequest(id) {
         const confirm = await showConfirm("هل الطلب غير ملائم؟ سيعود للكباتن الآخرين.");
         if (!confirm.isConfirmed) return;
+        stopTracking();
         try {
             const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
             const req = await res.json();
@@ -1082,10 +1171,21 @@
     }
 
     // ============================================================
-    // 8. تشغيل عند تحميل الصفحة
+    // 9. تشغيل عند تحميل الصفحة
     // ============================================================
     window.onload = function() {
         checkSession();
+        
+        // محاولة فك قفل الصوت مبكراً عند أي ضغطة على الشاشة
+        document.body.addEventListener('click', function unlockAudio() {
+            if(alertSound) {
+                alertSound.play().then(() => {
+                    alertSound.pause();
+                    alertSound.currentTime = 0;
+                }).catch(e => {});
+            }
+            document.body.removeEventListener('click', unlockAudio);
+        }, { once: true });
     };
 </script>
 </body>
