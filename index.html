@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🛺 أم ضوابان - الكباتن</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
@@ -79,6 +80,24 @@
             margin-left: 10px;
         }
         .btn-secondary:hover { background: #4b5563; }
+        .btn-sound {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            float: left;
+            margin-left: 10px;
+            animation: pulse-purple 2s infinite;
+        }
+        .btn-sound:hover { background: #7c3aed; animation: none; }
+        @keyframes pulse-purple {
+            0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+        }
         .btn-refresh {
             background: #2563eb;
             color: white;
@@ -361,6 +380,10 @@
     </style>
 </head>
 <body>
+
+<!-- إضافة عنصر الصوت هنا في الـ HTML لضمان توافقه مع كافة الهواتف -->
+<audio id="alertAudio" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto"></audio>
+
 <div class="container" id="app">
     <h1>🛺 لوحة تحكم الكباتن</h1>
     
@@ -393,6 +416,8 @@
         <div class="captain-info">
             <span style="font-weight:bold;">👤 <span id="captain-name-display"></span></span>
             <div class="left-btns">
+                <!-- زر جديد للسماح وتجربة الصوت -->
+                <button class="btn-sound" id="soundBtn" onclick="testAndUnlockAudio()">🔊 تفعيل التنبيه</button>
                 <button class="btn-location" id="locationBtn" onclick="updateCaptainLocation()">📍 تحديث موقعي</button>
                 <button class="btn-secondary" onclick="toggleCompletedTrips()">📋 الرحلات المكتملة <span id="completedCountBadge" class="comp-badge" style="display:none;">0</span></button>
                 <button class="btn-refresh" id="refreshBtn" onclick="manualRefresh()">🔄 تحديث</button>
@@ -453,11 +478,6 @@
     const CAPTAINS_URL = RIDE_DB_URL + "captains.json";
     const CAPTAINS_LOCATIONS_URL = RIDE_DB_URL + "captains_locations.json";
 
-    // كائن تشغيل الصوت المخصص مع إعدادات التحميل المسبق
-    const alertSound = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav");
-    alertSound.preload = "auto";
-    alertSound.load(); // تحميل الملف مسبقاً في ذاكرة المتصفح
-
     let currentCaptain = null;
     let currentCaptainFullName = null;
     let currentCaptainPhone = null;
@@ -469,13 +489,14 @@
     let fcmToken = null;
     let locationUpdateInterval = null;
     let captainChatIntervals = {};
+    let isAudioUnlocked = false;
 
     // ===== متغيرات التتبع =====
     let trackingInterval = null;
     let currentTrackingRideId = null;
 
     // ============================================================
-    // 3. دوال مساعدة (تنبيهات)
+    // 3. دوال مساعدة (تنبيهات و الصوت)
     // ============================================================
     function showAlert(message, icon = 'info') {
         Swal.fire({
@@ -497,6 +518,39 @@
             confirmButtonColor: '#10b981',
             cancelButtonColor: '#ef4444',
         });
+    }
+
+    // دالة تجربة و فك حظر الصوت
+    function testAndUnlockAudio() {
+        const audio = document.getElementById('alertAudio');
+        audio.currentTime = 0;
+        audio.play().then(() => {
+            isAudioUnlocked = true;
+            document.getElementById('soundBtn').style.animation = 'none';
+            document.getElementById('soundBtn').innerHTML = '✅ الصوت مفعل';
+            document.getElementById('soundBtn').style.background = '#10b981';
+            showAlert("تم تفعيل التنبيه الصوتي بنجاح، سيعمل الآن عند كل طلب جديد", "success");
+        }).catch(e => {
+            showAlert("يرجى التأكد من أن هاتفك ليس على الوضع الصامت", "warning");
+        });
+    }
+
+    // فك حظر مخفي للصوت عند أي ضغطة على الشاشة
+    function silentUnlockAudio() {
+        if (isAudioUnlocked) return;
+        const audio = document.getElementById('alertAudio');
+        audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            isAudioUnlocked = true;
+            document.getElementById('soundBtn').style.animation = 'none';
+            document.getElementById('soundBtn').innerHTML = '✅ الصوت مفعل';
+            document.getElementById('soundBtn').style.background = '#10b981';
+            
+            // إزالة المستمعات بعد التفعيل لتوفير الموارد
+            document.removeEventListener('click', silentUnlockAudio);
+            document.removeEventListener('touchstart', silentUnlockAudio);
+        }).catch(e => {});
     }
 
     // ============================================================
@@ -725,14 +779,6 @@
                 return;
             }
 
-            // فك قفل الصوت الخاص بالمتصفح عند ضغط زر تسجيل الدخول
-            if (alertSound) {
-                alertSound.play().then(() => {
-                    alertSound.pause();
-                    alertSound.currentTime = 0;
-                }).catch(e => console.log("تهيئة الصوت تمت."));
-            }
-
             localStorage.setItem('captainSession', username);
             currentCaptain = username;
             currentCaptainFullName = captain.fullName || username;
@@ -804,17 +850,21 @@
         if (requestsListener) { clearInterval(requestsListener); requestsListener = null; }
         Object.values(captainChatIntervals).forEach(clearInterval);
         captainChatIntervals = {};
+        isAudioUnlocked = false;
 
         document.getElementById('dashboard-section').style.display = 'none';
         document.getElementById('login-section').style.display = 'block';
         document.getElementById('captain-username').value = '';
         document.getElementById('captain-password').value = '';
+        document.getElementById('soundBtn').innerHTML = '🔊 تفعيل التنبيه';
+        document.getElementById('soundBtn').style.background = '#8b5cf6';
+        document.getElementById('soundBtn').style.animation = 'pulse-purple 2s infinite';
         document.title = '🛺 أم ضوابان - الكباتن';
         showAlert("✅ تم تسجيل الخروج", "success");
     }
 
     // ============================================================
-    // 7. FCM والإشعارات (تم دمج النغمة الصوتية)
+    // 7. FCM والإشعارات (تم دمج النغمة الصوتية المضمونة)
     // ============================================================
     const VAPID_KEY = 'BElg5wRrBkitPpH9tGN1WGEKVx0hVTdRYJSPdlyhkPRG2FEcaEzayQ8aoHKnNZ_fST7V3E9ZmVWmxMBgkSmgd0o';
 
@@ -834,15 +884,10 @@
                 });
                 messaging.onMessage((payload) => {
                     if (payload.notification) {
-                        
-                        // تشغيل النغمة بشكل مضمون عند استقبال الرسالة 🔔
-                        if (alertSound) {
-                            alertSound.currentTime = 0;
-                            var playPromise = alertSound.play();
-                            if (playPromise !== undefined) {
-                                playPromise.catch(error => console.log(error));
-                            }
-                        }
+                        // تشغيل النغمة 🔔
+                        const audio = document.getElementById('alertAudio');
+                        audio.currentTime = 0;
+                        audio.play().catch(e => console.log(e));
                         
                         showBrowserNotification(payload.notification.title, payload.notification.body);
                         loadRequests();
@@ -871,17 +916,20 @@
             const req = snapshot.val();
             if (lastNotifiedRequestId === snapshot.key) return;
             lastNotifiedRequestId = snapshot.key;
-            if (req.status === 'pending' && (!req.rejectedBy || !req.rejectedBy[currentCaptain])) {
+            
+            // التأكد من أن الطلب جديد (ليس أقدم من 30 ثانية) حتى لا يزعج الكابتن عند التحديث
+            const isNewRequest = (Date.now() - req.timestamp) < 30000;
+
+            if (req.status === 'pending' && (!req.rejectedBy || !req.rejectedBy[currentCaptain]) && isNewRequest) {
                 
-                // تشغيل نغمة التنبيه بشكل مضمون 🔔
-                if (alertSound) {
-                    alertSound.currentTime = 0;
-                    var playPromise = alertSound.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(error => {
-                            console.log("المتصفح حجب الصوت تلقائياً، سيتم التشغيل فور نقر الكابتن على الشاشة:", error);
-                        });
-                    }
+                // تشغيل نغمة التنبيه 🔔
+                const audio = document.getElementById('alertAudio');
+                audio.currentTime = 0;
+                let playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("الصوت محظور برمجيا، اضغط على الشاشة لتفعيله");
+                    });
                 }
 
                 const title = `🛺 طلب جديد من ${req.userId}`;
@@ -1176,16 +1224,9 @@
     window.onload = function() {
         checkSession();
         
-        // محاولة فك قفل الصوت مبكراً عند أي ضغطة على الشاشة
-        document.body.addEventListener('click', function unlockAudio() {
-            if(alertSound) {
-                alertSound.play().then(() => {
-                    alertSound.pause();
-                    alertSound.currentTime = 0;
-                }).catch(e => {});
-            }
-            document.body.removeEventListener('click', unlockAudio);
-        }, { once: true });
+        // استماع للضغط على الشاشة لفك حظر الصوت برمجياً بصمت
+        document.addEventListener('click', silentUnlockAudio);
+        document.addEventListener('touchstart', silentUnlockAudio);
     };
 </script>
 </body>
