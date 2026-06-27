@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🚕 أم ضوابان - الكباتن</title>
+    <title>🛺 أم ضوابان - الكباتن</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -80,6 +80,31 @@
             margin-left: 10px;
         }
         .btn-secondary:hover { background: #4b5563; }
+        .btn-refresh {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            float: left;
+            margin-left: 10px;
+        }
+        .btn-refresh:hover { background: #1d4ed8; }
+        .btn-location {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            float: left;
+            margin-left: 10px;
+        }
+        .btn-location:hover { background: #059669; }
+        .btn-location:disabled { opacity: 0.6; cursor: not-allowed; }
         .request-card {
             background: #fff;
             border: 1px solid #e2e8f0;
@@ -313,11 +338,32 @@
             font-size: 0.85rem;
             margin-bottom: 12px;
         }
+        .refresh-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .location-status {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 4px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .location-status .online { color: #10b981; font-weight: bold; }
+        .location-status .offline { color: #ef4444; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container" id="app">
-    <h1>🚕 لوحة تحكم الكباتن</h1>
+    <h1>🛺 لوحة تحكم الكباتن</h1>
     
     <div id="login-section">
         <div class="login-box">
@@ -335,6 +381,7 @@
             <h3 style="margin-bottom:12px;">📝 تسجيل كابتن جديد</h3>
             <p style="color:#64748b; font-size:0.85rem; margin-bottom:15px;">بعد التسجيل، سيتم مراجعة طلبك من قبل الإدارة لتفعيل الحساب</p>
             <input type="text" id="reg-fullname" placeholder="الاسم الرباعي (يظهر للعملاء)" style="text-align:right;">
+            <input type="tel" id="reg-phone" placeholder="رقم الهاتف (للتواصل والعرض على الخريطة)" style="text-align:right;">
             <input type="text" id="reg-username" placeholder="اسم المستخدم (للحساب فقط)" style="text-align:right;">
             <input type="password" id="reg-password" placeholder="كلمة السر">
             <input type="password" id="reg-password-confirm" placeholder="تأكيد كلمة السر">
@@ -347,12 +394,14 @@
         <div class="captain-info">
             <span style="font-weight:bold;">👤 <span id="captain-name-display"></span></span>
             <div class="left-btns">
+                <button class="btn-location" id="locationBtn" onclick="updateCaptainLocation()">📍 تحديث موقعي</button>
                 <button class="btn-secondary" onclick="toggleCompletedTrips()">📋 الرحلات المكتملة <span id="completedCountBadge" class="comp-badge" style="display:none;">0</span></button>
+                <button class="btn-refresh" id="refreshBtn" onclick="manualRefresh()">🔄 تحديث</button>
                 <button class="logout-btn" onclick="captainLogout()">تسجيل خروج</button>
             </div>
         </div>
+        <div id="locationStatus" class="location-status">📍 الموقع: <span class="offline">غير مشارك</span></div>
         
-        <!-- شريط حالة الإشعارات -->
         <div id="notificationStatus" class="notification-permission-bar" style="display:none;">
             🔔 الإشعارات مفعّلة – ستصل التنبيهات عند وجود طلبات جديدة
         </div>
@@ -364,7 +413,6 @@
             <div class="empty-msg">جاري تحميل الطلبات...</div>
         </div>
 
-        <!-- قسم الرحلات المكتملة -->
         <div id="completedTripsContainer" class="completed-container">
             <div class="completed-title">
                 <h3>📋 الرحلات المكتملة</h3>
@@ -382,7 +430,9 @@
 </div>
 
 <script>
-    // ===== تكوين Firebase =====
+    // ============================================================
+    // 1. تكوين Firebase
+    // ============================================================
     const firebaseConfig = {
         apiKey: "AIzaSyC0DjfY8GdsIjAcyf5iuaoltqYcOnrVsZk",
         authDomain: "rksha-d7c59.firebaseapp.com",
@@ -396,7 +446,29 @@
         firebase.initializeApp(firebaseConfig);
     }
 
-    // ===== دوال الرسائل =====
+    // ============================================================
+    // 2. المتغيرات والروابط
+    // ============================================================
+    const RIDE_DB_URL = "https://rksha-d7c59-default-rtdb.europe-west1.firebasedatabase.app/";
+    const RIDE_REQUESTS_URL = RIDE_DB_URL + "ride_requests.json";
+    const CAPTAINS_URL = RIDE_DB_URL + "captains.json";
+    const CAPTAINS_LOCATIONS_URL = RIDE_DB_URL + "captains_locations.json";
+
+    let currentCaptain = null;
+    let currentCaptainFullName = null;
+    let currentCaptainPhone = null;
+    let requestsListener = null;
+    let completedTripsVisible = false;
+    let completedTripsLoaded = false;
+    let notificationListener = null;
+    let lastNotifiedRequestId = null;
+    let fcmToken = null;
+    let locationUpdateInterval = null;
+    let captainChatIntervals = {};
+
+    // ============================================================
+    // 3. دوال مساعدة (تنبيهات)
+    // ============================================================
     function showAlert(message, icon = 'info') {
         Swal.fire({
             title: 'منصة أم ضوابان الإلكترونية',
@@ -406,7 +478,6 @@
             confirmButtonColor: '#2563eb',
         });
     }
-
     function showConfirm(message) {
         return Swal.fire({
             title: 'منصة أم ضوابان الإلكترونية',
@@ -420,255 +491,114 @@
         });
     }
 
-    // ===== المتغيرات =====
-    const RIDE_DB_URL = "https://rksha-d7c59-default-rtdb.europe-west1.firebasedatabase.app/";
-    const RIDE_REQUESTS_URL = RIDE_DB_URL + "ride_requests.json";
-    const CAPTAINS_URL = RIDE_DB_URL + "captains.json";
-
-    let currentCaptain = null;
-    let currentCaptainFullName = null;
-    let requestsListener = null;
-    let completedTripsVisible = false;
-    let completedTripsLoaded = false;
-    let notificationListener = null;
-    let lastNotifiedRequestId = null;
-    let fcmToken = null;
-
     // ============================================================
-    // ===== VAPID KEY (Web Push Notification) =====
+    // 4. دوال تحديث الموقع (الجديدة)
     // ============================================================
-    const VAPID_KEY = 'BElg5wRrBkitPpH9tGN1WGEKVx0hVTdRYJSPdlyhkPRG2FEcaEzayQ8aoHKnNZ_fST7V3E9ZmVWmxMBgkSmgd0o';
-
-    // ============================================================
-    // ===== Firebase Cloud Messaging =====
-    // ============================================================
-    
-    // تسجيل Service Worker
-    async function registerServiceWorker() {
-        if (!('serviceWorker' in navigator)) {
-            console.warn('المتصفح لا يدعم Service Workers');
-            return false;
-        }
-        try {
-            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-            console.log('✅ Service Worker مسجل بنجاح');
-            return registration;
-        } catch (e) {
-            console.error('❌ فشل تسجيل Service Worker:', e);
-            return false;
-        }
-    }
-
-    // الحصول على FCM Token
-    async function getFCMToken() {
-        if (!('Notification' in window) || Notification.permission === 'denied') {
-            console.warn('⚠️ الإشعارات مرفوضة من قبل المستخدم');
-            return null;
-        }
+    async function updateCaptainLocation() {
+        const btn = document.getElementById('locationBtn');
+        btn.disabled = true;
+        btn.innerHTML = '⏳ جارٍ التحديث...';
 
         try {
-            const messaging = firebase.messaging();
-            const token = await messaging.getToken({ vapidKey: VAPID_KEY });
-            if (token) {
-                fcmToken = token;
-                console.log('✅ FCM Token:', token);
-                await saveFCMToken(token);
-                return token;
-            } else {
-                console.warn('⚠️ لم يتم الحصول على FCM Token');
-                return null;
+            if (!navigator.geolocation) {
+                showAlert("المتصفح لا يدعم تحديد الموقع", "error");
+                return;
             }
-        } catch (e) {
-            console.error('❌ خطأ في الحصول على FCM Token:', e);
-            if (e.message && e.message.includes('messaging/permission-blocked')) {
-                showAlert('⚠️ يرجى السماح بالإشعارات في إعدادات المتصفح', 'warning');
-            }
-            return null;
-        }
-    }
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                });
+            });
 
-    // حفظ FCM Token في قاعدة البيانات
-    async function saveFCMToken(token) {
-        if (!currentCaptain) return;
-        try {
-            const url = RIDE_DB_URL + `captains/${currentCaptain}/fcmTokens.json`;
-            const tokenData = {
-                [token]: {
-                    timestamp: Date.now(),
-                    userAgent: navigator.userAgent
-                }
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            // حفظ الموقع في قاعدة البيانات
+            const locationData = {
+                name: currentCaptainFullName || currentCaptain,
+                phone: currentCaptainPhone || 'غير متوفر',
+                lat: lat,
+                lng: lng,
+                status: 'متاح',
+                lastUpdate: Date.now()
             };
-            await fetch(url, {
+
+            await fetch(CAPTAINS_LOCATIONS_URL, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(tokenData)
+                body: JSON.stringify({ [currentCaptain]: locationData })
             });
-            console.log('✅ تم حفظ FCM Token في قاعدة البيانات');
+
+            document.getElementById('locationStatus').innerHTML = `📍 الموقع: <span class="online">تم التحديث (${lat.toFixed(6)}, ${lng.toFixed(6)})</span>`;
+            showAlert("✅ تم تحديث موقعك بنجاح! سيظهر للعملاء على الخريطة.", "success");
+
+            // بدء التحديث التلقائي كل 30 ثانية
+            if (locationUpdateInterval) clearInterval(locationUpdateInterval);
+            locationUpdateInterval = setInterval(autoUpdateLocation, 30000);
+
         } catch (e) {
-            console.error('❌ فشل حفظ FCM Token:', e);
+            console.error(e);
+            let msg = "فشل تحديد الموقع";
+            if (e.message) msg += ": " + e.message;
+            showAlert(msg, "error");
+            document.getElementById('locationStatus').innerHTML = '📍 الموقع: <span class="offline">فشل التحديث</span>';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '📍 تحديث موقعي';
         }
     }
 
-    // الاستماع للرسائل أثناء تشغيل التطبيق
-    function setupFCMListener() {
-        try {
-            const messaging = firebase.messaging();
-            messaging.onMessage((payload) => {
-                console.log('📩 رسالة FCM واردة:', payload);
-                if (payload.notification) {
-                    const title = payload.notification.title || '🚕 طلب جديد';
-                    const body = payload.notification.body || 'يوجد طلب ركشه في انتظارك';
-                    showBrowserNotification(title, body);
-                    playNotificationSound();
-                    loadRequests(); // تحديث فوري
-                }
-            });
-        } catch (e) {
-            console.error('❌ فشل إعداد مستمع FCM:', e);
-        }
-    }
-
-    // تهيئة FCM
-    async function initializeFCM() {
+    async function autoUpdateLocation() {
         if (!currentCaptain) return;
-        
         try {
-            // تسجيل Service Worker
-            const swRegistered = await registerServiceWorker();
-            if (!swRegistered) {
-                console.warn('⚠️ Service Worker غير مسجل، سيتم استخدام الإشعارات العادية');
-                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (عادية) – تعمل عند فتح التطبيق';
-                document.getElementById('notificationStatus').style.display = 'block';
-                return;
-            }
-
-            // طلب إذن الإشعارات
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.warn('⚠️ الإشعارات غير مصرح بها');
-                document.getElementById('notificationStatus').textContent = '⚠️ يرجى السماح بالإشعارات في المتصفح';
-                document.getElementById('notificationStatus').style.display = 'block';
-                return;
-            }
-
-            // الحصول على Token
-            const token = await getFCMToken();
-            if (token) {
-                setupFCMListener();
-                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (FCM) – ستصل التنبيهات حتى عند إغلاق التطبيق ✅';
-                document.getElementById('notificationStatus').style.display = 'block';
-                showAlert('✅ تم تفعيل الإشعارات بنجاح! ستصل التنبيهات حتى عند إغلاق المتصفح.', 'success');
-            } else {
-                // في حال فشل FCM، نستخدم الإشعارات العادية
-                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (عادية) – تعمل عند فتح التطبيق';
-                document.getElementById('notificationStatus').style.display = 'block';
-            }
-        } catch (e) {
-            console.error('❌ فشل تهيئة FCM:', e);
-            // نستخدم الإشعارات العادية كحل بديل
-            document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة (عادية) – تعمل عند فتح التطبيق';
-            document.getElementById('notificationStatus').style.display = 'block';
-        }
-    }
-
-    // إزالة FCM Token عند تسجيل الخروج
-    async function removeFCMToken() {
-        if (!currentCaptain || !fcmToken) return;
-        try {
-            const url = RIDE_DB_URL + `captains/${currentCaptain}/fcmTokens/${fcmToken}.json`;
-            await fetch(url, { method: 'DELETE' });
-            console.log('✅ تم حذف FCM Token');
-        } catch (e) {
-            console.error('❌ فشل حذف FCM Token:', e);
-        }
-    }
-
-    // ============================================================
-    // ===== دوال الإشعارات العادية (Web Notifications) =====
-    // ============================================================
-    
-    function showBrowserNotification(title, body) {
-        if (!('Notification' in window) || Notification.permission !== 'granted') return;
-        try {
-            const notification = new Notification(title, {
-                body: body,
-                icon: 'https://via.placeholder.com/64/2563eb/ffffff?text=🚕',
-                tag: 'new-ride-request',
-                requireInteraction: true
+            if (!navigator.geolocation) return;
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                });
             });
-            setTimeout(() => notification.close(), 15000);
-            notification.onclick = function() {
-                window.focus();
-                this.close();
-                document.getElementById('requests-container').scrollIntoView({ behavior: 'smooth' });
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            const locationData = {
+                name: currentCaptainFullName || currentCaptain,
+                phone: currentCaptainPhone || 'غير متوفر',
+                lat: lat,
+                lng: lng,
+                status: 'متاح',
+                lastUpdate: Date.now()
             };
+
+            await fetch(CAPTAINS_LOCATIONS_URL, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [currentCaptain]: locationData })
+            });
+            document.getElementById('locationStatus').innerHTML = `📍 الموقع: <span class="online">تم التحديث تلقائياً</span>`;
         } catch (e) {
-            console.error('فشل عرض الإشعار', e);
+            console.warn("فشل التحديث التلقائي للموقع", e);
         }
     }
 
-    function playNotificationSound() {
-        try {
-            const audio = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
-            audio.volume = 0.3;
-            audio.play().catch(e => console.log('صوت التنبيه معطل', e));
-        } catch (e) { /* تجاهل */ }
-    }
-
-    // ===== الاستماع للطلبات الجديدة (بدون FCM - احتياطي) =====
-    function setupNotificationListener() {
+    async function removeCaptainLocation() {
         if (!currentCaptain) return;
-        if (notificationListener) {
-            firebase.database().ref('ride_requests').off('child_added', notificationListener);
-        }
-        
-        notificationListener = firebase.database().ref('ride_requests').orderByChild('timestamp').limitToLast(1);
-        notificationListener.on('child_added', (snapshot) => {
-            const requestId = snapshot.key;
-            const request = snapshot.val();
-            
-            if (lastNotifiedRequestId === requestId) return;
-            lastNotifiedRequestId = requestId;
-            
-            if (request.status === 'pending' && 
-                (!request.rejectedBy || !request.rejectedBy[currentCaptain])) {
-                
-                const title = `🚕 طلب ركشه جديد!`;
-                const typeText = request.type === 'ride' ? 'مشوار' : 'توصيل';
-                const body = `👤 ${request.userId} | ${typeText}`;
-                
-                showBrowserNotification(title, body);
-                playNotificationSound();
-                loadRequests();
-                updatePendingCount();
-            }
-        });
-    }
-
-    function updatePendingCount() {
-        fetch(RIDE_REQUESTS_URL).then(res => res.json()).then(requests => {
-            let count = 0;
-            if (requests) {
-                for (let key in requests) {
-                    const req = requests[key];
-                    if (req.status === 'pending' && 
-                        (!req.rejectedBy || !req.rejectedBy[currentCaptain])) {
-                        count++;
-                    }
-                }
-            }
-            if (count > 0) {
-                document.title = `🚕 (${count}) أم ضوابان - الكباتن`;
-            } else {
-                document.title = '🚕 أم ضوابان - الكباتن';
-            }
-        }).catch(e => console.error(e));
+        try {
+            await fetch(CAPTAINS_LOCATIONS_URL, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [currentCaptain]: null })
+            });
+            console.log("تم حذف موقع الكابتن");
+        } catch (e) { console.error("فشل حذف الموقع", e); }
     }
 
     // ============================================================
-    // ===== دوال تسجيل الدخول والحساب =====
+    // 5. تسجيل الدخول والتسجيل
     // ============================================================
-
     function showRegister() {
         document.getElementById('login-section').style.display = 'none';
         document.getElementById('register-section').style.display = 'block';
@@ -678,190 +608,218 @@
         document.getElementById('login-section').style.display = 'block';
     }
 
-    // ===== تسجيل كابتن جديد =====
     async function registerCaptain() {
         const fullName = document.getElementById('reg-fullname').value.trim();
+        const phone = document.getElementById('reg-phone').value.trim();
         const username = document.getElementById('reg-username').value.trim().toLowerCase();
         const password = document.getElementById('reg-password').value.trim();
         const confirm = document.getElementById('reg-password-confirm').value.trim();
 
-        if (!fullName || !username || !password || !confirm) {
+        if (!fullName || !phone || !username || !password || !confirm) {
             showAlert("يرجى ملء جميع الحقول", "warning");
             return;
         }
-        if (fullName.length < 4) {
-            showAlert("الاسم الرباعي يجب أن يكون 4 أحرف على الأقل", "warning");
-            return;
-        }
-        if (password.length < 4) {
-            showAlert("كلمة السر يجب أن تكون 4 أحرف أو أكثر", "warning");
-            return;
-        }
-        if (password !== confirm) {
-            showAlert("كلمة السر غير متطابقة", "warning");
-            return;
-        }
+        if (fullName.length < 4) { showAlert("الاسم 4 أحرف على الأقل", "warning"); return; }
+        if (password.length < 4) { showAlert("كلمة السر 4 أحرف أو أكثر", "warning"); return; }
+        if (password !== confirm) { showAlert("كلمة السر غير متطابقة", "warning"); return; }
 
         try {
             const res = await fetch(CAPTAINS_URL);
             const captains = await res.json() || {};
             if (captains[username]) {
-                showAlert("⚠️ اسم المستخدم هذا محجوز بالفعل", "error");
+                showAlert("⚠️ اسم المستخدم محجوز", "error");
                 return;
             }
 
             const newCaptain = {
                 fullName: fullName,
+                phone: phone,
                 password: password,
                 active: false,
                 registeredAt: Date.now()
             };
-            const putUrl = RIDE_DB_URL + `captains/${username}.json`;
-            const putResponse = await fetch(putUrl, {
+            await fetch(RIDE_DB_URL + `captains/${username}.json`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newCaptain)
             });
-            if (!putResponse.ok) throw new Error("فشل الحفظ");
 
-            showAlert("🎉 تم تسجيلك بنجاح! سيتم تفعيل حسابك من قبل الإدارة قريباً.", "success");
+            showAlert("🎉 تم تسجيلك! سيتم تفعيل حسابك من قبل الإدارة قريباً.", "success");
             showLogin();
-            document.getElementById('reg-fullname').value = '';
-            document.getElementById('reg-username').value = '';
-            document.getElementById('reg-password').value = '';
-            document.getElementById('reg-password-confirm').value = '';
         } catch (e) {
-            showAlert("❌ حدث خطأ أثناء التسجيل: " + e.message, "error");
-            console.error(e);
+            showAlert("❌ خطأ: " + e.message, "error");
         }
     }
 
-    // ===== تسجيل دخول مع حفظ الجلسة =====
     async function captainLogin() {
         const username = document.getElementById('captain-username').value.trim().toLowerCase();
         const password = document.getElementById('captain-password').value.trim();
-        if (!username || !password) {
-            showAlert("يرجى ملء الحقول", "warning");
-            return;
-        }
+        if (!username || !password) { showAlert("املأ الحقول", "warning"); return; }
 
         try {
             const res = await fetch(CAPTAINS_URL);
             const captains = await res.json() || {};
             const captain = captains[username];
-            if (!captain) {
-                showAlert("❌ اسم المستخدم غير موجود", "error");
-                return;
-            }
-            if (captain.password !== password) {
-                showAlert("❌ كلمة السر غير صحيحة", "error");
-                return;
-            }
+            if (!captain) { showAlert("❌ اسم المستخدم غير موجود", "error"); return; }
+            if (captain.password !== password) { showAlert("❌ كلمة السر غير صحيحة", "error"); return; }
             if (captain.active !== true) {
                 showAlert("⏳ حسابك غير مفعّل بعد. يرجى الانتظار حتى موافقة الإدارة.", "warning");
                 return;
             }
 
+            // تسجيل الدخول
             localStorage.setItem('captainSession', username);
             currentCaptain = username;
             currentCaptainFullName = captain.fullName || username;
+            currentCaptainPhone = captain.phone || 'غير متوفر';
+            
             document.getElementById('login-section').style.display = 'none';
             document.getElementById('register-section').style.display = 'none';
             document.getElementById('dashboard-section').style.display = 'block';
             document.getElementById('captain-name-display').textContent = `${captain.fullName} (${username})`;
-            
-            // تفعيل الإشعارات (FCM + عادية)
-            await initializeFCM();
-            setupNotificationListener(); // احتياطي
+
+            // تهيئة الإشعارات
+            try { await initializeFCM(); } catch(e) { console.error(e); }
+            try { setupNotificationListener(); } catch(e) { console.error(e); }
+
             await loadRequests();
             startListening();
             updateCompletedCount();
-            console.log("✅ تم تسجيل الدخول بنجاح، جاري تحديث الطلبات...");
-        } catch (e) {
-            showAlert("خطأ في الاتصال بقاعدة البيانات", "error");
-            console.error(e);
+            showAlert("✅ تم تسجيل الدخول بنجاح!", "success");
+
+        } catch(e) {
+            showAlert("❌ حدث خطأ غير متوقع: " + e.message, "error");
         }
     }
 
-    // ===== التحقق من الجلسة المحفوظة =====
     async function checkSession() {
-        const savedUsername = localStorage.getItem('captainSession');
-        if (!savedUsername) return;
-
+        const saved = localStorage.getItem('captainSession');
+        if (!saved) return;
         try {
             const res = await fetch(CAPTAINS_URL);
             const captains = await res.json() || {};
-            const captain = captains[savedUsername];
+            const captain = captains[saved];
             if (!captain || captain.active !== true) {
                 localStorage.removeItem('captainSession');
                 return;
             }
-
-            currentCaptain = savedUsername;
-            currentCaptainFullName = captain.fullName || savedUsername;
+            currentCaptain = saved;
+            currentCaptainFullName = captain.fullName || saved;
+            currentCaptainPhone = captain.phone || 'غير متوفر';
+            
             document.getElementById('login-section').style.display = 'none';
             document.getElementById('register-section').style.display = 'none';
             document.getElementById('dashboard-section').style.display = 'block';
-            document.getElementById('captain-name-display').textContent = `${captain.fullName} (${savedUsername})`;
-            
-            await initializeFCM();
-            setupNotificationListener();
+            document.getElementById('captain-name-display').textContent = `${captain.fullName} (${saved})`;
+
+            try { await initializeFCM(); } catch(e) { console.error(e); }
+            try { setupNotificationListener(); } catch(e) { console.error(e); }
             await loadRequests();
             startListening();
             updateCompletedCount();
-            console.log("✅ تم استعادة الجلسة، جاري تحديث الطلبات...");
-        } catch (e) {
-            console.error("خطأ في استعادة الجلسة", e);
-        }
+        } catch(e) { console.error(e); localStorage.removeItem('captainSession'); }
     }
 
     function captainLogout() {
-        // إزالة مستمع الإشعارات
-        if (notificationListener) {
-            firebase.database().ref('ride_requests').off('child_added', notificationListener);
-            notificationListener = null;
-        }
-        // حذف FCM Token
-        removeFCMToken();
+        try {
+            if (notificationListener) {
+                firebase.database().ref('ride_requests').off('child_added', notificationListener);
+                notificationListener = null;
+            }
+        } catch(e) {}
         
+        // إزالة الموقع من الخريطة
+        removeCaptainLocation();
+        if (locationUpdateInterval) { clearInterval(locationUpdateInterval); locationUpdateInterval = null; }
+
         localStorage.removeItem('captainSession');
         currentCaptain = null;
         currentCaptainFullName = null;
+        currentCaptainPhone = null;
         completedTripsVisible = false;
-        completedTripsLoaded = false;
-        document.getElementById('completedTripsContainer').style.display = 'none';
         if (requestsListener) { clearInterval(requestsListener); requestsListener = null; }
-        if (window.captainChatIntervals) {
-            Object.values(window.captainChatIntervals).forEach(clearInterval);
-            window.captainChatIntervals = {};
-        }
+        Object.values(captainChatIntervals).forEach(clearInterval);
+        captainChatIntervals = {};
+
         document.getElementById('dashboard-section').style.display = 'none';
         document.getElementById('login-section').style.display = 'block';
         document.getElementById('captain-username').value = '';
         document.getElementById('captain-password').value = '';
-        document.title = '🚕 أم ضوابان - الكباتن';
-        showAlert("تم تسجيل الخروج بنجاح", "info");
+        document.title = '🛺 أم ضوابان - الكباتن';
+        showAlert("✅ تم تسجيل الخروج", "success");
     }
 
     // ============================================================
-    // ===== دوال الطلبات والمحادثة =====
+    // 6. FCM والإشعارات (مختصرة ولكن تعمل)
     // ============================================================
+    const VAPID_KEY = 'BElg5wRrBkitPpH9tGN1WGEKVx0hVTdRYJSPdlyhkPRG2FEcaEzayQ8aoHKnNZ_fST7V3E9ZmVWmxMBgkSmgd0o';
 
+    async function initializeFCM() {
+        if (!('Notification' in window)) return;
+        if (Notification.permission === 'denied') return;
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') return;
+            const messaging = firebase.messaging();
+            const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+            if (token) {
+                fcmToken = token;
+                await fetch(RIDE_DB_URL + `captains/${currentCaptain}/fcmTokens.json`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ [token]: { timestamp: Date.now() } })
+                });
+                messaging.onMessage((payload) => {
+                    if (payload.notification) {
+                        showBrowserNotification(payload.notification.title, payload.notification.body);
+                        loadRequests();
+                    }
+                });
+                document.getElementById('notificationStatus').style.display = 'block';
+                document.getElementById('notificationStatus').textContent = '🔔 الإشعارات مفعّلة ✅';
+            }
+        } catch(e) { console.error("FCM error", e); }
+    }
+
+    function showBrowserNotification(title, body) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        try {
+            const n = new Notification(title, { body, icon: '🛺', requireInteraction: true });
+            setTimeout(() => n.close(), 15000);
+        } catch(e) {}
+    }
+
+    function setupNotificationListener() {
+        if (notificationListener) {
+            firebase.database().ref('ride_requests').off('child_added', notificationListener);
+        }
+        notificationListener = firebase.database().ref('ride_requests').orderByChild('timestamp').limitToLast(1);
+        notificationListener.on('child_added', (snapshot) => {
+            const req = snapshot.val();
+            if (lastNotifiedRequestId === snapshot.key) return;
+            lastNotifiedRequestId = snapshot.key;
+            if (req.status === 'pending' && (!req.rejectedBy || !req.rejectedBy[currentCaptain])) {
+                const title = `🛺 طلب جديد من ${req.userId}`;
+                const body = req.type === 'ride' ? `مشوار: ${req.from} → ${req.to}` : `توصيل: ${req.pickup} → ${req.dropoff}`;
+                showBrowserNotification(title, body);
+                loadRequests();
+            }
+        });
+    }
+
+    // ============================================================
+    // 7. دوال الطلبات والمحادثة
+    // ============================================================
     async function loadRequests() {
-        console.log("🔄 جاري تحميل الطلبات...");
         const container = document.getElementById('requests-container');
         if (!container) return;
-        
         try {
             const res = await fetch(RIDE_REQUESTS_URL);
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             const requests = await res.json() || {};
-            
             let html = '';
             let hasVisible = false;
-            const sortedKeys = Object.keys(requests).sort((a,b) => requests[b].timestamp - requests[a].timestamp);
+            const keys = Object.keys(requests).sort((a,b) => requests[b].timestamp - requests[a].timestamp);
 
-            for (let key of sortedKeys) {
+            for (let key of keys) {
                 const req = requests[key];
                 if (req.status === 'completed') continue;
                 if (req.rejectedBy && req.rejectedBy[currentCaptain]) continue;
@@ -870,21 +828,12 @@
                 if (req.status !== 'pending' && req.status !== 'accepted' && req.status !== 'waiting_confirmation') continue;
 
                 hasVisible = true;
-                const statusMap = {
-                    'pending': '⏳ قيد الانتظار',
-                    'accepted': '✅ تم القبول (في الطريق)',
-                    'waiting_confirmation': '⏳ بانتظار تأكيد العميل'
-                };
+                const statusMap = { 'pending': '⏳ قيد الانتظار', 'accepted': '✅ تم القبول', 'waiting_confirmation': '⏳ بانتظار تأكيد العميل' };
                 const typeLabel = req.type === 'ride' ? '🚗 مشوار' : '📦 توصيل';
-                let details = '';
-                if (req.type === 'ride') {
-                    details = `من: ${req.from} → إلى: ${req.to}`;
-                } else {
-                    details = `تسلم: ${req.pickup} → تسليم: ${req.dropoff}`;
-                    if (req.desc) details += ` (${req.desc})`;
-                }
+                let details = req.type === 'ride' ? `من: ${req.from} → إلى: ${req.to}` : `تسلم: ${req.pickup} → تسليم: ${req.dropoff}`;
+                if (req.type === 'delivery' && req.desc) details += ` (${req.desc})`;
 
-                const hasNewMsg = req.messages && req.messages.length > 0 && req.messages[req.messages.length-1].sender !== currentCaptain;
+                const hasNewMsg = req.messages && req.messages.length && req.messages[req.messages.length-1].sender !== currentCaptain;
                 const newMsgAlert = hasNewMsg ? `<span class="new-msg-alert">🔴 جديد</span>` : '';
 
                 html += `
@@ -906,36 +855,30 @@
                                 <button class="btn-chat" onclick="toggleChat('${key}')">💬 محادثة ${newMsgAlert}</button>
                             ` : ''}
                             ${req.status === 'waiting_confirmation' && req.captainName === currentCaptain ? `
-                                <span style="color:#f59e0b; font-weight:bold; font-size:0.9rem;">⏳ في انتظار تأكيد العميل</span>
+                                <span style="color:#f59e0b;font-weight:bold;">⏳ بانتظار العميل</span>
                                 <button class="btn-chat" onclick="toggleChat('${key}')">💬 محادثة ${newMsgAlert}</button>
                             ` : ''}
                         </div>
                         <div id="chat-container-${key}" class="chat-container">
-                            <div id="chat-messages-${key}" class="chat-messages">
-                                <p style="color:#94a3b8; text-align:center;">لا توجد رسائل</p>
-                            </div>
+                            <div id="chat-messages-${key}" class="chat-messages"><p style="color:#94a3b8;">لا توجد رسائل</p></div>
                             <div class="chat-input-group">
-                                <input type="text" id="chat-input-${key}" placeholder="اكتب رسالتك...">
+                                <input type="text" id="chat-input-${key}" placeholder="رسالتك...">
                                 <button onclick="sendCaptainMessage('${key}')">إرسال</button>
                             </div>
                         </div>
                     </div>
                 `;
             }
-            if (!hasVisible) {
-                html = '<div class="empty-msg">🚫 لا توجد طلبات معلقة أو قيد التنفيذ حالياً</div>';
-            }
+            if (!hasVisible) html = '<div class="empty-msg">🚫 لا توجد طلبات معلقة</div>';
             container.innerHTML = html;
-            updatePendingCount();
-        } catch (e) {
-            console.error("❌ خطأ في loadRequests:", e);
-            container.innerHTML = '<div class="empty-msg" style="color:red;">حدث خطأ أثناء تحميل الطلبات</div>';
+        } catch(e) {
+            container.innerHTML = '<div class="empty-msg" style="color:red;">خطأ في التحميل</div>';
         }
     }
 
     async function rejectRequest(id) {
-        const result = await showConfirm("هل تريد رفض هذا الطلب؟ سيختفي من قائمتك فقط.");
-        if (!result.isConfirmed) return;
+        const confirm = await showConfirm("رفض الطلب؟ سيختفي من قائمتك فقط.");
+        if (!confirm.isConfirmed) return;
         try {
             const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
             const req = await res.json();
@@ -943,113 +886,76 @@
             rejectedBy[currentCaptain] = true;
             await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rejectedBy: rejectedBy })
+                body: JSON.stringify({ rejectedBy })
             });
-            await loadRequests();
-        } catch (e) {
-            showAlert("فشل رفض الطلب", "error");
-            console.error(e);
-        }
+            loadRequests();
+        } catch(e) { showAlert("فشل الرفض", "error"); }
     }
 
-    async function updateRequest(id, newStatus) {
+    async function updateRequest(id, status) {
         if (!currentCaptain) return;
         try {
-            const updateData = { status: newStatus };
-            if (newStatus === 'accepted') {
-                updateData.captainName = currentCaptain;
-                updateData.captainFullName = currentCaptainFullName;
+            const update = { status };
+            if (status === 'accepted') {
+                update.captainName = currentCaptain;
+                update.captainFullName = currentCaptainFullName;
             }
             await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updateData)
+                body: JSON.stringify(update)
             });
-            await loadRequests();
-        } catch (e) {
-            showAlert("فشل تحديث حالة الطلب", "error");
-            console.error(e);
-        }
+            loadRequests();
+        } catch(e) { showAlert("فشل التحديث", "error"); }
     }
 
     async function requestCompletion(id) {
-        const result = await showConfirm("هل أنت متأكد من رغبتك في إنهاء هذا الطلب؟ سيتم إرسال طلب تأكيد للعميل.");
-        if (!result.isConfirmed) return;
-        try {
-            await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'waiting_confirmation' })
-            });
-            await loadRequests();
-        } catch (e) {
-            showAlert("فشل طلب الإنهاء", "error");
-            console.error(e);
-        }
+        const confirm = await showConfirm("هل تريد إنهاء هذا الطلب؟ سيطلب تأكيد العميل.");
+        if (!confirm.isConfirmed) return;
+        await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'waiting_confirmation' })
+        });
+        loadRequests();
+        updateCompletedCount();
     }
 
     async function unfitRequest(id) {
-        const result = await showConfirm("هل أنت متأكد أن هذا الطلب غير ملائم؟ سيتم إلغاء قبولك ويعود للكباتن الآخرين.");
-        if (!result.isConfirmed) return;
+        const confirm = await showConfirm("هل الطلب غير ملائم؟ سيعود للكباتن الآخرين.");
+        if (!confirm.isConfirmed) return;
         try {
             const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
             const req = await res.json();
             const rejectedBy = req.rejectedBy || {};
             rejectedBy[currentCaptain] = true;
-            
-            const notificationMessage = `الكابتن ${currentCaptainFullName || currentCaptain} قام بإلغاء الطلب لأنه غير ملائم له`;
-            
+            const msg = `الكابتن ${currentCaptainFullName} ألغى الطلب لأنه غير ملائم`;
             await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     status: 'pending',
                     captainName: null,
                     captainFullName: null,
-                    rejectedBy: rejectedBy,
-                    unfitNotification: {
-                        message: notificationMessage,
-                        timestamp: Date.now()
-                    }
+                    rejectedBy,
+                    unfitNotification: { message: msg, timestamp: Date.now() }
                 })
             });
-            await loadRequests();
-        } catch (e) {
-            showAlert("فشل تحديث الطلب", "error");
-            console.error(e);
-        }
+            loadRequests();
+        } catch(e) { showAlert("فشل", "error"); }
     }
 
-    // ===== المحادثة =====
+    // ===== المحادثة (الكابتن) =====
     function toggleChat(id) {
         const container = document.getElementById(`chat-container-${id}`);
         if (!container) return;
         if (container.style.display === 'none' || container.style.display === '') {
             container.style.display = 'block';
-            if (requestsListener) {
-                clearInterval(requestsListener);
-                requestsListener = null;
-            }
+            if (requestsListener) { clearInterval(requestsListener); requestsListener = null; }
             loadCaptainMessages(id);
-            if (!window.captainChatIntervals) window.captainChatIntervals = {};
-            if (window.captainChatIntervals[id]) clearInterval(window.captainChatIntervals[id]);
-            window.captainChatIntervals[id] = setInterval(() => {
-                loadCaptainMessages(id);
-            }, 3000);
-            setTimeout(() => {
-                const input = document.getElementById(`chat-input-${id}`);
-                if (input) input.focus();
-            }, 100);
+            if (captainChatIntervals[id]) clearInterval(captainChatIntervals[id]);
+            captainChatIntervals[id] = setInterval(() => loadCaptainMessages(id), 3000);
         } else {
             container.style.display = 'none';
-            if (window.captainChatIntervals && window.captainChatIntervals[id]) {
-                clearInterval(window.captainChatIntervals[id]);
-                delete window.captainChatIntervals[id];
-            }
-            if (!requestsListener) {
-                requestsListener = setInterval(loadRequests, 5000);
-            }
+            if (captainChatIntervals[id]) { clearInterval(captainChatIntervals[id]); delete captainChatIntervals[id]; }
+            if (!requestsListener) { requestsListener = setInterval(loadRequests, 500); }
         }
     }
 
@@ -1060,14 +966,11 @@
             const messages = req.messages || [];
             const container = document.getElementById(`chat-messages-${id}`);
             if (!container) return;
-            if (messages.length === 0) {
-                container.innerHTML = '<p style="color:#94a3b8; text-align:center;">لا توجد رسائل بعد</p>';
-                return;
-            }
+            if (!messages.length) { container.innerHTML = '<p style="color:#94a3b8;">لا توجد رسائل</p>'; return; }
             let html = '';
             messages.forEach(msg => {
-                const isMine = msg.sender === currentCaptain;
-                html += `<div style="text-align:${isMine ? 'left' : 'right'}; margin-bottom:4px;">
+                const isMine = msg.sender === currentCaptainFullName || msg.sender === currentCaptain;
+                html += `<div style="text-align:${isMine ? 'left' : 'right'};margin-bottom:4px;">
                             <div class="msg-bubble ${isMine ? 'msg-bubble-mine' : 'msg-bubble-other'}">
                                 <div class="msg-sender">${msg.sender}</div>
                                 <div class="msg-text">${msg.text}</div>
@@ -1078,7 +981,7 @@
             });
             container.innerHTML = html;
             container.scrollTop = container.scrollHeight;
-        } catch (e) { console.error(e); }
+        } catch(e) {}
     }
 
     async function sendCaptainMessage(id) {
@@ -1087,34 +990,38 @@
         const text = input.value.trim();
         if (!text) return;
         input.value = '';
-
         try {
             const res = await fetch(RIDE_DB_URL + `ride_requests/${id}.json`);
             const req = await res.json();
             const messages = req.messages || [];
-            messages.push({
-                sender: currentCaptainFullName || currentCaptain,
-                text: text,
-                time: Date.now()
-            });
+            messages.push({ sender: currentCaptainFullName || currentCaptain, text, time: Date.now() });
             await fetch(RIDE_DB_URL + `ride_requests/${id}.json`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: messages })
+                body: JSON.stringify({ messages })
             });
             loadCaptainMessages(id);
-            setTimeout(() => { if (input) input.focus(); }, 50);
-        } catch (e) {
-            showAlert("فشل إرسال الرسالة", "error");
-            console.error(e);
-        }
+        } catch(e) { showAlert("فشل الإرسال", "error"); }
     }
 
-    // ===== التحديث التلقائي =====
+    // ===== تحديث تلقائي =====
     function startListening() {
         if (requestsListener) clearInterval(requestsListener);
-        requestsListener = setInterval(loadRequests, 5000);
-        console.log("🔄 بدء التحديث التلقائي للطلبات كل 5 ثوانٍ");
+        requestsListener = setInterval(loadRequests, 500);
+    }
+
+    function manualRefresh() {
+        const btn = document.getElementById('refreshBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="refresh-spinner"></span> تحديث...';
+        loadRequests().then(() => {
+            loadCompletedTrips();
+            updateCompletedCount();
+            btn.disabled = false;
+            btn.innerHTML = '🔄 تحديث';
+        }).catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '🔄 تحديث';
+        });
     }
 
     // ===== الرحلات المكتملة =====
@@ -1125,33 +1032,21 @@
             const requests = await res.json() || {};
             let count = 0;
             for (let key in requests) {
-                const req = requests[key];
-                if (req.status === 'completed' && req.captainName === currentCaptain) {
-                    count++;
-                }
+                if (requests[key].status === 'completed' && requests[key].captainName === currentCaptain) count++;
             }
             const badge = document.getElementById('completedCountBadge');
-            if (count > 0) {
-                badge.style.display = 'inline-block';
-                badge.textContent = count;
-            } else {
-                badge.style.display = 'none';
-            }
-        } catch (e) {
-            console.error("خطأ في تحديث عدد الرحلات المكتملة", e);
-        }
+            if (count > 0) { badge.style.display = 'inline-block'; badge.textContent = count; }
+            else badge.style.display = 'none';
+        } catch(e) {}
     }
 
     function toggleCompletedTrips() {
         const container = document.getElementById('completedTripsContainer');
-        if (!container) return;
         if (container.style.display === 'none' || container.style.display === '') {
             container.style.display = 'block';
-            completedTripsVisible = true;
             loadCompletedTrips();
         } else {
             container.style.display = 'none';
-            completedTripsVisible = false;
         }
     }
 
@@ -1159,54 +1054,36 @@
         const list = document.getElementById('completedTripsList');
         if (!list) return;
         list.innerHTML = '<div class="empty-msg">جاري التحميل...</div>';
-        
         try {
             const res = await fetch(RIDE_REQUESTS_URL);
-            if (!res.ok) throw new Error("فشل جلب البيانات");
             const requests = await res.json() || {};
-            
             let html = '';
             let found = false;
-            const sortedKeys = Object.keys(requests).sort((a,b) => requests[b].timestamp - requests[a].timestamp);
-            
-            for (let key of sortedKeys) {
+            const keys = Object.keys(requests).sort((a,b) => requests[b].timestamp - requests[a].timestamp);
+            for (let key of keys) {
                 const req = requests[key];
                 if (req.status === 'completed' && req.captainName === currentCaptain) {
                     found = true;
                     const typeLabel = req.type === 'ride' ? '🚗 مشوار' : '📦 توصيل';
-                    let details = '';
-                    if (req.type === 'ride') {
-                        details = `من: ${req.from} → إلى: ${req.to}`;
-                    } else {
-                        details = `تسلم: ${req.pickup} → تسليم: ${req.dropoff}`;
-                        if (req.desc) details += ` (${req.desc})`;
-                    }
+                    let details = req.type === 'ride' ? `من: ${req.from} → إلى: ${req.to}` : `تسلم: ${req.pickup} → تسليم: ${req.dropoff}`;
                     html += `
                         <div class="completed-card">
-                            <div class="comp-header">
-                                <span class="comp-user">👤 ${req.userId}</span>
-                                <span class="comp-type">${typeLabel}</span>
-                            </div>
+                            <div class="comp-header"><span class="comp-user">👤 ${req.userId}</span><span class="comp-type">${typeLabel}</span></div>
                             <div class="comp-details">${details}</div>
                             <div class="comp-time">🕒 ${new Date(req.timestamp).toLocaleString('ar-EG')}</div>
-                            ${req.captainFullName ? `<div style="font-size:0.8rem; color:#64748b;">🚕 الكابتن: ${req.captainFullName}</div>` : ''}
-                        </div>
-                    `;
+                        </div>`;
                 }
             }
-            
-            if (!found) {
-                html = '<div class="empty-msg">📭 لا توجد رحلات مكتملة حتى الآن</div>';
-            }
+            if (!found) html = '<div class="empty-msg">📭 لا توجد رحلات مكتملة</div>';
             list.innerHTML = html;
-            completedTripsLoaded = true;
-        } catch (e) {
-            console.error("خطأ في تحميل الرحلات المكتملة", e);
-            list.innerHTML = '<div class="empty-msg" style="color:red;">حدث خطأ أثناء التحميل</div>';
+        } catch(e) {
+            list.innerHTML = '<div class="empty-msg" style="color:red;">خطأ في التحميل</div>';
         }
     }
 
-    // ===== استعادة الجلسة عند تحميل الصفحة =====
+    // ============================================================
+    // 8. تشغيل عند تحميل الصفحة
+    // ============================================================
     window.onload = function() {
         checkSession();
     };
